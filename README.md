@@ -27,7 +27,7 @@ git clone https://github.com/loongson/binutils-gdb.git
 cd binutils-gdb
 mkdir build
 cd build
-../configure --prefix=/opt/loongarch64/toolchain --target=x86_64-linux-gnu --disable-nls --enable-shared --enable-64-bit-bfd --disable-werror"
+../configure --prefix=/opt/loongarch64/toolchain --target=x86_64-linux-gnu --disable-nls --enable-shared --enable-64-bit-bfd --disable-werror
 make && make install
 
 rm ./* -rf
