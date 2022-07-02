@@ -478,11 +478,11 @@ index c390508a..b37c6c68 100644
  #elif defined(__x86_64__)
  
  #define MCONTEXT_GREGS_OFFSET     40
-diff --git src/google_breakpad/common/minidump_cpu_loongarch64.h src/google_breakpad/common/minidump_cpu_loongarch64.h
+diff --git src/google_breakpad/common/minidump_cpu_loong64.h src/google_breakpad/common/minidump_cpu_loong64.h
 new file mode 100644
 index 00000000..876930a5
 --- /dev/null
-+++ src/google_breakpad/common/minidump_cpu_loongarch64.h
++++ src/google_breakpad/common/minidump_cpu_loong64.h
 @@ -0,0 +1,130 @@
 +/* Copyright (c) 2013, Google Inc.
 + * All rights reserved.
@@ -615,14 +615,14 @@ index 00000000..876930a5
 +
 +#endif  // GOOGLE_BREAKPAD_COMMON_MINIDUMP_CPU_LOONGARCH64_H__
 diff --git src/google_breakpad/common/minidump_format.h src/google_breakpad/common/minidump_format.h
-index 7b36d112..c3783764 100644
+index 7b36d112..0b1feef3 100644
 --- src/google_breakpad/common/minidump_format.h
 +++ src/google_breakpad/common/minidump_format.h
 @@ -120,6 +120,7 @@ typedef struct {
  #include "minidump_cpu_ppc64.h"
  #include "minidump_cpu_sparc.h"
  #include "minidump_cpu_x86.h"
-+#include "minidump_cpu_loongarch64.h"
++#include "minidump_cpu_loong64.h"
  
  /*
   * WinVer.h
@@ -832,7 +832,7 @@ index da531b74..3ea27389 100644
        break;
      }
 diff --git src/processor/minidump.cc src/processor/minidump.cc
-index 572c717c..1964a47a 100644
+index 572c717c..a98a82d9 100644
 --- src/processor/minidump.cc
 +++ src/processor/minidump.cc
 @@ -96,6 +96,8 @@ bool IsContextSizeUnique(uint32_t context_size) {
@@ -887,7 +887,7 @@ index 572c717c..1964a47a 100644
 +               ++ireg_index) {
 +            Swap(&context_loongarch->iregs[ireg_index]);
 +          }
-+          Swap(&context_loongarch->csr_epc);
++          Swap(&context_loongarch->csr_era);
 +          for (int fpr_index = 0;
 +               fpr_index < MD_FLOATINGSAVEAREA_LOONGARCH64_FPR_COUNT;
 +               ++fpr_index) {
@@ -936,7 +936,7 @@ index 572c717c..1964a47a 100644
          *context_cpu_flags = 0;
          break;
 diff --git src/processor/minidump_processor.cc src/processor/minidump_processor.cc
-index ac86fbd3..df9329f9 100644
+index ac86fbd3..886cbf0f 100644
 --- src/processor/minidump_processor.cc
 +++ src/processor/minidump_processor.cc
 @@ -383,6 +383,7 @@ static uint64_t GetAddressForArchitecture(const MDCPUArchitecture architecture,
@@ -947,25 +947,27 @@ index ac86fbd3..df9329f9 100644
      case MD_CPU_ARCHITECTURE_PPC:
      case MD_CPU_ARCHITECTURE_SHX:
      case MD_CPU_ARCHITECTURE_ARM:
-@@ -592,6 +593,9 @@ bool MinidumpProcessor::GetCPUInfo(Minidump* dump, SystemInfo* info) {
+@@ -592,6 +593,11 @@ bool MinidumpProcessor::GetCPUInfo(Minidump* dump, SystemInfo* info) {
        break;
      }
  
 +    case MD_CPU_ARCHITECTURE_LOONGARCH64: {
 +      info->cpu = "loongarch64";
 +      break;
++    }
++
      default: {
        // Assign the numeric architecture ID into the CPU string.
        char cpu_string[7];
 diff --git src/processor/stackwalker.cc src/processor/stackwalker.cc
-index e123b027..ae1cc0d0 100644
+index e123b027..e9cd5e1b 100644
 --- src/processor/stackwalker.cc
 +++ src/processor/stackwalker.cc
 @@ -55,6 +55,7 @@
  #include "processor/stackwalker_arm.h"
  #include "processor/stackwalker_arm64.h"
  #include "processor/stackwalker_mips.h"
-+#include "processor/stackwalker_loongarch64.h"
++#include "processor/stackwalker_loong64.h"
  
  namespace google_breakpad {
  
@@ -982,11 +984,11 @@ index e123b027..ae1cc0d0 100644
    }
  
    BPLOG_IF(ERROR, !cpu_stackwalker) << "Unknown CPU type " << HexString(cpu) <<
-diff --git src/processor/stackwalker_loongarch64.cc src/processor/stackwalker_loongarch64.cc
+diff --git src/processor/stackwalker_loong64.cc src/processor/stackwalker_loong64.cc
 new file mode 100644
-index 00000000..64a9e8f0
+index 00000000..5039ff81
 --- /dev/null
-+++ src/processor/stackwalker_loongarch64.cc
++++ src/processor/stackwalker_loong64.cc
 @@ -0,0 +1,276 @@
 +// Copyright (c) 2013 Google Inc.
 +// All rights reserved.
@@ -1017,9 +1019,9 @@ index 00000000..64a9e8f0
 +// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 +// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 +
-+// stackwalker_loongarch64.cc: LOONGARCH64-specific stackwalker.
++// stackwalker_loong64.cc: LOONGARCH64-specific stackwalker.
 +//
-+// See stackwalker_loongarch64.h for documentation.
++// See stackwalker_loong64.h for documentation.
 +
 +#include "common/scoped_ptr.h"
 +#include "google_breakpad/processor/call_stack.h"
@@ -1030,9 +1032,9 @@ index 00000000..64a9e8f0
 +#include "processor/cfi_frame_info.h"
 +#include "processor/logging.h"
 +#include "processor/postfix_evaluator-inl.h"
-+#include "processor/stackwalker_loongarch64.h"
++#include "processor/stackwalker_loong64.h"
 +#include "processor/windows_frame_info.h"
-+#include "google_breakpad/common/minidump_cpu_loongarch64.h"
++#include "google_breakpad/common/minidump_cpu_loong64.h"
 +
 +namespace google_breakpad {
 +
@@ -1264,11 +1266,11 @@ index 00000000..64a9e8f0
 +
 +}  // namespace google_breakpad
 +
-diff --git src/processor/stackwalker_loongarch64.h src/processor/stackwalker_loongarch64.h
+diff --git src/processor/stackwalker_loong64.h src/processor/stackwalker_loong64.h
 new file mode 100644
-index 00000000..710beb70
+index 00000000..536a912a
 --- /dev/null
-+++ src/processor/stackwalker_loongarch64.h
++++ src/processor/stackwalker_loong64.h
 @@ -0,0 +1,83 @@
 +// Copyright (c) 2013 Google Inc.
 +// All rights reserved.
@@ -1299,7 +1301,7 @@ index 00000000..710beb70
 +// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 +// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 +
-+// stackwalker_loongarch64.h: LOONGARCH64-specific stackwalker.
++// stackwalker_loong64.h: LOONGARCH64-specific stackwalker.
 +//
 +// Provides stack frames given LOONGARCH64 register context and a memory region
 +// corresponding to a LOONGARCH64 stack.
