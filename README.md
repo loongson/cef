@@ -31,7 +31,7 @@ cd build
 make && make install
 
 rm ./* -rf
-../configure --prefix=/opt/loongarch64/toolchain --target=loongarch64-linux-gnu --with-lib-path=/usr/lib64:/lib64:/usr/lib:/lib --disable-nls --enable-shared --enable-64-bit-bfd --disable-werror
+../configure --prefix=/opt/loongarch64/toolchain --target=loongarch64-linux-gnu --with-sysroot --disable-nls --enable-shared --enable-64-bit-bfd --disable-werror
 make && make install
 ```
 ### 1.3.制作sysroot
