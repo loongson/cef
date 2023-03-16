@@ -1,0 +1,13 @@
+diff --git include/openssl/base.h include/openssl/base.h
+index a4a91f540..e04b8cc63 100644
+--- include/openssl/base.h
++++ include/openssl/base.h
+@@ -120,6 +120,8 @@ extern "C" {
+ #define OPENSSL_32_BIT
+ #elif defined(__riscv) && __riscv_xlen == 64
+ #define OPENSSL_64_BIT
++#elif defined(__loongarch64)
++#define OPENSSL_64_BIT
+ #else
+ // Note BoringSSL only supports standard 32-bit and 64-bit two's-complement,
+ // little-endian architectures. Functions will not produce the correct answer
