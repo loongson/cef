@@ -1,0 +1,82 @@
+diff --git src/dawn/common/Assert.cpp src/dawn/common/Assert.cpp
+index ecc92dfc83..0a716882d3 100644
+--- src/dawn/common/Assert.cpp
++++ src/dawn/common/Assert.cpp
+@@ -31,10 +31,12 @@ void BreakPoint() {
+     __asm__ __volatile__("ebreak");
+ #elif DAWN_PLATFORM_IS(MIPS)
+     __asm__ __volatile__("break");
+-#elif DAWN_PLATFORM_IS(S390) || DAWN_PLATFORM_IS_(S390X)
++#elif DAWN_PLATFORM_IS(S390) || DAWN_PLATFORM_IS(S390X)
+     __asm__ __volatile__(".word 0x0001");
+-#elif DAWN_PLATFORM_IS(PPC) || DAWN_PLATFORM_IS_(PPC64)
++#elif DAWN_PLATFORM_IS(PPC) || DAWN_PLATFORM_IS(PPC64)
+     __asm__ __volatile__("twge 2,2");
++#elif DAWN_PLATFORM_IS(LOONGARCH)
++    __asm__ __volatile__("break 0");
+ #else
+ #error "Unsupported platform"
+ #endif
+diff --git src/dawn/common/Platform.h src/dawn/common/Platform.h
+index 39d5eb4102..aae26ae38b 100644
+--- src/dawn/common/Platform.h
++++ src/dawn/common/Platform.h
+@@ -84,6 +84,9 @@
+ //  - ARM
+ //    - ARM32
+ //    - ARM64
++//  - LOONGARCH
++//    - LOONGARCH32
++//    - LOONGARCH64
+ //  - RISCV
+ //    - RISCV32
+ //    - RISCV64
+@@ -108,6 +111,14 @@
+ #define DAWN_PLATFORM_IS_ARM 1
+ #define DAWN_PLATFORM_IS_ARM64 1
+ 
++#elif defined(__loongarch__)
++#define DAWN_PLATFORM_IS_LOONGARCH 1
++#if __loongarch_grlen == 64
++#define DAWN_PLATFORM_IS_LOONGARCH64 1
++#else
++#define DAWN_PLATFORM_IS_LOONGARCH32 1
++#endif
++
+ #elif defined(__riscv)
+ #define DAWN_PLATFORM_IS_RISCV 1
+ #if __riscv_xlen == 32
+@@ -144,13 +155,14 @@
+ //  - 32_BIT
+ #if defined(DAWN_PLATFORM_IS_X86_64) || defined(DAWN_PLATFORM_IS_ARM64) ||   \
+     defined(DAWN_PLATFORM_IS_RISCV64) || defined(DAWN_PLATFORM_IS_MIPS64) || \
+-    defined(DAWN_PLATFORM_IS_S390X) || defined(DAWN_PLATFORM_IS_PPC64)
++    defined(DAWN_PLATFORM_IS_S390X) || defined(DAWN_PLATFORM_IS_PPC64) || \
++    defined(DAWN_PLATFORM_IS_LOONGARCH64)
+ #define DAWN_PLATFORM_IS_64_BIT 1
+ static_assert(sizeof(sizeof(char)) == 8, "Expect sizeof(size_t) == 8");
+ #elif defined(DAWN_PLATFORM_IS_I386) || defined(DAWN_PLATFORM_IS_ARM32) ||   \
+     defined(DAWN_PLATFORM_IS_RISCV32) || defined(DAWN_PLATFORM_IS_MIPS32) || \
+     defined(DAWN_PLATFORM_IS_S390) || defined(DAWN_PLATFORM_IS_PPC32) ||     \
+-    defined(DAWN_PLATFORM_IS_EMSCRIPTEN)
++    defined(DAWN_PLATFORM_IS_EMSCRIPTEN) || defined(DAWN_PLATFORM_IS_LOONGARCH32)
+ #define DAWN_PLATFORM_IS_32_BIT 1
+ static_assert(sizeof(sizeof(char)) == 4, "Expect sizeof(size_t) == 4");
+ #else
+@@ -216,6 +228,16 @@ static_assert(sizeof(sizeof(char)) == 4, "Expect sizeof(size_t) == 4");
+ #define DAWN_PLATFORM_IS_ARM64 0
+ #endif
+ 
++#if !defined(DAWN_PLATFORM_IS_LOONGARCH)
++#define DAWN_PLATFORM_IS_LOONGARCH 0
++#endif
++#if !defined(DAWN_PLATFORM_IS_LOONGARCH32)
++#define DAWN_PLATFORM_IS_LOONGARCH32 0
++#endif
++#if !defined(DAWN_PLATFORM_IS_LOONGARCH64)
++#define DAWN_PLATFORM_IS_LOONGARCH64 0
++#endif
++
+ #if !defined(DAWN_PLATFORM_IS_RISCV)
+ #define DAWN_PLATFORM_IS_RISCV 0
+ #endif
