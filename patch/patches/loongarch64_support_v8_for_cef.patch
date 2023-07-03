@@ -1,0 +1,13 @@
+diff --git include/v8config.h include/v8config.h
+index a959be130d..d2bc2b19ea 100644
+--- include/v8config.h
++++ include/v8config.h
+@@ -751,6 +751,8 @@ V8 shared library set USING_V8_SHARED.
+ #elif __riscv_xlen == 32
+ #define V8_TARGET_ARCH_RISCV32 1
+ #endif
++#elif defined(__loongarch64)
++#define V8_TARGET_ARCH_LOONG64 1
+ #else
+ #error Target architecture was not detected as supported by v8
+ #endif
