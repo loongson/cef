@@ -521,6 +521,12 @@ parser.add_option(
     default=False,
     help='create an ARM64 binary distribution (Linux only)')
 parser.add_option(
+    '--loong64-build',
+    action='store_true',
+    dest='loong64build',
+    default=False,
+    help='create a LoongArch 64-bit binary distribution (Linux only)')
+parser.add_option(
     '--minimal',
     action='store_true',
     dest='minimal',
@@ -634,6 +640,9 @@ elif options.armbuild:
 elif options.arm64build:
   platform_arch = 'arm64'
   binary_arch = 'arm64'
+elif options.loong64build:
+  platform_arch = 'loong64'
+  binary_arch = 'loong64'
 else:
   platform_arch = '32'
   binary_arch = 'x86'
@@ -693,6 +702,8 @@ elif options.armbuild:
   build_dir_suffix = '_GN_arm'
 elif options.arm64build:
   build_dir_suffix = '_GN_arm64'
+elif options.loong64build:
+  build_dir_suffix = '_GN_loong64'
 else:
   build_dir_suffix = '_GN_x86'
 
@@ -1198,11 +1209,9 @@ elif platform == 'linux':
       {'path': libcef_so},
       {'path': 'libEGL.so'},
       {'path': 'libGLESv2.so'},
-      {'path': 'libvk_swiftshader.so'},
       {'path': 'libvulkan.so.1'},
       {'path': 'snapshot_blob.bin', 'conditional': True},
       {'path': 'v8_context_snapshot.bin', 'conditional': True},
-      {'path': 'vk_swiftshader_icd.json'},
   ]
   # yapf: enable
   if options.ozone:

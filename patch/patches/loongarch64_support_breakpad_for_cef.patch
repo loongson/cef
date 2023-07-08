@@ -1,0 +1,757 @@
+diff --git src/client/linux/dump_writer_common/raw_context_cpu.h src/client/linux/dump_writer_common/raw_context_cpu.h
+index ea4b6f6a..4126c6a1 100644
+--- src/client/linux/dump_writer_common/raw_context_cpu.h
++++ src/client/linux/dump_writer_common/raw_context_cpu.h
+@@ -51,6 +51,8 @@ typedef MDRawContextRISCV64 RawContextCPU;
+ # else
+ #  error "Unexpected __riscv_xlen"
+ # endif
++#elif defined(__loongarch64)
++typedef MDRawContextLOONGARCH64 RawContextCPU;
+ #else
+ #error "This code has not been ported to your platform yet."
+ #endif
+diff --git src/client/linux/dump_writer_common/thread_info.cc src/client/linux/dump_writer_common/thread_info.cc
+index fc82c0c6..b832f652 100644
+--- src/client/linux/dump_writer_common/thread_info.cc
++++ src/client/linux/dump_writer_common/thread_info.cc
+@@ -340,7 +340,26 @@ void ThreadInfo::FillCPUContext(RawContextCPU* out) const {
+ #  error "Unexpected __riscv_flen"
+ # endif
+ }
+-#endif  // __riscv
++#elif defined(__loongarch64)
++
++uintptr_t ThreadInfo::GetInstructionPointer() const {
++  return regs.csr_era;
++}
++
++void ThreadInfo::FillCPUContext(RawContextCPU* out) const {
++  out->context_flags = MD_CONTEXT_LOONGARCH64_FULL;
++
++  for (int i = 0; i < MD_CONTEXT_LOONGARCH64_GPR_COUNT; ++i)
++    out->iregs[i] = regs.regs[i];
++
++  out->csr_era = regs.csr_era;
++  my_memcpy(&out->float_save.regs, &fpregs.fpr,
++       MD_FLOATINGSAVEAREA_LOONGARCH64_FPR_COUNT * 8);
++  out->float_save.fcc = fpregs.fcc;
++  out->float_save.fcsr = fpregs.fcsr;
++}
++
++#endif  // __loongarch64
+ 
+ void ThreadInfo::GetGeneralPurposeRegisters(void** gp_regs, size_t* size) {
+   assert(gp_regs || size);
+diff --git src/client/linux/dump_writer_common/thread_info.h src/client/linux/dump_writer_common/thread_info.h
+index af786bcc..5f132fea 100644
+--- src/client/linux/dump_writer_common/thread_info.h
++++ src/client/linux/dump_writer_common/thread_info.h
+@@ -70,6 +70,10 @@ struct ThreadInfo {
+ #elif defined(__mips__) || defined(__riscv)
+   // Use the structure defined in <sys/ucontext.h>.
+   mcontext_t mcontext;
++#elif defined(__loongarch64)
++  // Use the structures defined in <sys/user.h>
++  struct user_regs_struct regs;
++  struct user_fp_struct fpregs;
+ #endif
+ 
+   // Returns the instruction pointer (platform-dependent impl.).
+diff --git src/client/linux/dump_writer_common/ucontext_reader.cc src/client/linux/dump_writer_common/ucontext_reader.cc
+index c6a8e9aa..66482e4a 100644
+--- src/client/linux/dump_writer_common/ucontext_reader.cc
++++ src/client/linux/dump_writer_common/ucontext_reader.cc
+@@ -326,6 +326,24 @@ void UContextReader::FillCPUContext(RawContextCPU* out, const ucontext_t* uc) {
+   out->float_save.fpcsr = uc->uc_mcontext.__fpregs.__q.__fcsr;
+ # endif
+ }
++#elif defined(__loongarch64)
++
++uintptr_t UContextReader::GetStackPointer(const ucontext_t* uc) {
++  return uc->uc_mcontext.__gregs[MD_CONTEXT_LOONGARCH64_REG_SP];
++}
++
++uintptr_t UContextReader::GetInstructionPointer(const ucontext_t* uc) {
++  return uc->uc_mcontext.__pc;
++}
++
++void UContextReader::FillCPUContext(RawContextCPU* out, const ucontext_t* uc) {
++  out->context_flags = MD_CONTEXT_LOONGARCH64_FULL;
++
++  for (int i = 0; i < MD_CONTEXT_LOONGARCH64_GPR_COUNT; ++i)
++    out->iregs[i] = uc->uc_mcontext.__gregs[i];
++
++  out->csr_era = uc->uc_mcontext.__pc;
++}
+ #endif
+ 
+ }  // namespace google_breakpad
+diff --git src/client/linux/minidump_writer/linux_core_dumper.cc src/client/linux/minidump_writer/linux_core_dumper.cc
+index 4bf9094e..195292cd 100644
+--- src/client/linux/minidump_writer/linux_core_dumper.cc
++++ src/client/linux/minidump_writer/linux_core_dumper.cc
+@@ -118,6 +118,9 @@ bool LinuxCoreDumper::GetThreadInfoByIndex(size_t index, ThreadInfo* info) {
+ #elif defined(__riscv)
+     stack_pointer = reinterpret_cast<uint8_t*>(
+         info->mcontext.__gregs[MD_CONTEXT_RISCV_REG_SP]);
++#elif defined(__loongarch64)
++  memcpy(&stack_pointer, &info->regs.regs[MD_CONTEXT_LOONGARCH64_REG_SP],
++        sizeof(info->regs.regs[MD_CONTEXT_LOONGARCH64_REG_SP]));
+ #else
+ # error "This code hasn't been ported to your platform yet."
+ #endif
+diff --git src/client/linux/minidump_writer/linux_dumper.h src/client/linux/minidump_writer/linux_dumper.h
+index 2d5b2e52..c35ef5d7 100644
+--- src/client/linux/minidump_writer/linux_dumper.h
++++ src/client/linux/minidump_writer/linux_dumper.h
+@@ -64,7 +64,8 @@ namespace google_breakpad {
+ typedef Elf32_auxv_t elf_aux_entry;
+ #elif defined(__x86_64) || defined(__aarch64__) || \
+      (defined(__mips__) && _MIPS_SIM != _ABIO32) || \
+-     (defined(__riscv) && __riscv_xlen == 64)
++     (defined(__riscv) && __riscv_xlen == 64) || \
++      defined(__loongarch64)
+ typedef Elf64_auxv_t elf_aux_entry;
+ #endif
+ 
+diff --git src/client/linux/minidump_writer/linux_ptrace_dumper.cc src/client/linux/minidump_writer/linux_ptrace_dumper.cc
+index 0e58236b..9860aee4 100644
+--- src/client/linux/minidump_writer/linux_ptrace_dumper.cc
++++ src/client/linux/minidump_writer/linux_ptrace_dumper.cc
+@@ -304,6 +304,9 @@ bool LinuxPtraceDumper::GetThreadInfoByIndex(size_t index, ThreadInfo* info) {
+ #elif defined(__riscv)
+   stack_pointer = reinterpret_cast<uint8_t*>(
+       info->mcontext.__gregs[MD_CONTEXT_RISCV_REG_SP]);
++#elif defined(__loongarch64)
++  my_memcpy(&stack_pointer, &info->regs.regs[MD_CONTEXT_LOONGARCH64_REG_SP],
++            sizeof(info->regs.regs[MD_CONTEXT_LOONGARCH64_REG_SP]));
+ #else
+ # error "This code hasn't been ported to your platform yet."
+ #endif
+diff --git src/client/linux/minidump_writer/minidump_writer.h src/client/linux/minidump_writer/minidump_writer.h
+index 24e3c7bd..b3906e07 100644
+--- src/client/linux/minidump_writer/minidump_writer.h
++++ src/client/linux/minidump_writer/minidump_writer.h
+@@ -47,7 +47,7 @@ class ExceptionHandler;
+ 
+ #if defined(__aarch64__)
+ typedef struct fpsimd_context fpstate_t;
+-#elif !defined(__ARM_EABI__) && !defined(__mips__)
++#elif !defined(__ARM_EABI__) && !defined(__mips__) && !defined(__loongarch64)
+ typedef std::remove_pointer<fpregset_t>::type fpstate_t;
+ #endif
+ 
+diff --git src/common/dwarf_cfi_to_module.cc src/common/dwarf_cfi_to_module.cc
+index 7e04d3c5..fd328bdd 100644
+--- src/common/dwarf_cfi_to_module.cc
++++ src/common/dwarf_cfi_to_module.cc
+@@ -170,6 +170,23 @@ vector<string> DwarfCFIToModule::RegisterNames::RISCV() {
+   return MakeVector(names, sizeof(names) / sizeof(names[0]));
+ }
+ 
++vector<string> DwarfCEIToModule::RegisterNames::LOONGARCH64() {
++  static const char* const kRegisterNames[] = {
++    "$zero", "$ra",  "$tp",  "$sp",  "$a0",   "$a1",  "$a2",  "$a3",
++    "$a4",   "$a5",  "$a6",  "$a7",  "$v0",   "$v1",  "$t0",  "$t1",
++    "$t2",   "$t3",  "$t4",  "$t5",  "$t6",   "$t7",  "$t8",  "$x",
++    "$fp",   "$s0",  "$s1",  "$s2",  "$s3",   "$s4",  "$s5",  "$s6",
++    "$s7",   "$s8",  "$pc",  "$fa0", "$fa1",  "$fa2", "$fa3", "$fa4",
++    "$fa5",  "$fa6", "$fa7", "$fv0", "$fv1",  "$ft0", "$ft1", "$ft2",
++    "$ft3",  "$ft4", "$ft5", "$ft6", "$ft7",  "$ft8", "$ft9", "$ft10",
++    "$ft11", "$ft12","$ft13","$ft14","$ft15", "$fs0", "$fs1", "$fs2",
++    "$fs3",  "$fs4", "$fs5", "$fs6", "$fs7"
++  };
++
++  return MakeVector(kRegisterNames,
++                   sizeof(kRegisterNames) / sizeof(kRegisterNames[0]));
++}
++
+ bool DwarfCFIToModule::Entry(size_t offset, uint64_t address, uint64_t length,
+                              uint8_t version, const string& augmentation,
+                              unsigned return_address) {
+diff --git src/common/dwarf_cfi_to_module.h src/common/dwarf_cfi_to_module.h
+index 19297db9..96055314 100644
+--- src/common/dwarf_cfi_to_module.h
++++ src/common/dwarf_cfi_to_module.h
+@@ -117,6 +117,9 @@ class DwarfCFIToModule: public CallFrameInfo::Handler {
+     // RISC-V.
+     static vector<string> RISCV();
+ 
++    // LOONGARCH64.
++    static vector<string> LOONGARCH64();
++
+    private:
+     // Given STRINGS, an array of C strings with SIZE elements, return an
+     // equivalent vector<string>.
+diff --git src/common/linux/breakpad_getcontext.S src/common/linux/breakpad_getcontext.S
+index 286047bf..5044e842 100644
+--- src/common/linux/breakpad_getcontext.S
++++ src/common/linux/breakpad_getcontext.S
+@@ -620,6 +620,69 @@ breakpad_getcontext:
+   .cfi_endproc
+   .size breakpad_getcontext, . - breakpad_getcontext
+ 
++#elif defined(__loongarch64)
++
++#define  _NSIG                       64
++#define  __NR_rt_sigprocmask         135
++
++  .text
++  .global breakpad_getcontext
++  .hidden breakpad_getcontext
++  .type breakpad_getcontext, @function
++  .align 4
++  .cfi_startproc
++breakpad_getcontext:
++  STORE_PC
++  STORE_GPR(0)
++  STORE_GPR(1)
++  STORE_GPR(2)
++  STORE_GPR(3)
++  STORE_GPR(4)
++  STORE_GPR(5)
++  STORE_GPR(6)
++  STORE_GPR(7)
++  STORE_GPR(8)
++  STORE_GPR(9)
++  STORE_GPR(10)
++  STORE_GPR(11)
++  STORE_GPR(12)
++  STORE_GPR(13)
++  STORE_GPR(14)
++  STORE_GPR(15)
++  STORE_GPR(16)
++  STORE_GPR(17)
++  STORE_GPR(18)
++  STORE_GPR(19)
++  STORE_GPR(20)
++  STORE_GPR(21)
++  STORE_GPR(22)
++  STORE_GPR(23)
++  STORE_GPR(24)
++  STORE_GPR(25)
++  STORE_GPR(26)
++  STORE_GPR(27)
++  STORE_GPR(28)
++  STORE_GPR(29)
++  STORE_GPR(30)
++  STORE_GPR(31)
++
++  /* rt_sigprocmask (SIG_BLOCK, NULL, &ucp->uc_sigmask, _NSIG8) */
++  addi.d $a2, $a0, MCONTEXT_SIGMASK_OFFSET
++  move  $a1, $zero
++  li.d  $a0, 0
++  li.d  $a3, _NSIG / 8
++  li.d  $a7, __NR_rt_sigprocmask
++
++  syscall 0
++
++  /* Return zero for success */
++  move $a0, $zero
++
++ jirl $zero, $ra, 0
++
++  .cfi_endproc
++  .size breakpad_getcontext, . - breakpad_getcontext
++
+ #else
+ # error "This file has not been ported for your CPU!"
+ #endif
+diff --git src/common/linux/dump_symbols.cc src/common/linux/dump_symbols.cc
+index 8179663b..cf448edc 100644
+--- src/common/linux/dump_symbols.cc
++++ src/common/linux/dump_symbols.cc
+@@ -452,6 +452,9 @@ bool DwarfCFIRegisterNames(const typename ElfClass::Ehdr* elf_header,
+     case EM_RISCV:
+       *register_names = DwarfCFIToModule::RegisterNames::RISCV();
+       return true;
++    case EM_LOONGARCH:
++      *register_names = DwarfCFIToModule::RegisterNames::LOONGARCH64();
++      return true;
+     default:
+       return false;
+   }
+@@ -1026,6 +1029,7 @@ const char* ElfArchitecture(const typename ElfClass::Ehdr* elf_header) {
+     case EM_SPARCV9:    return "sparcv9";
+     case EM_X86_64:     return "x86_64";
+     case EM_RISCV:      return "riscv";
++    case EM_LOONGARCH:  return "loongarch64";
+     default: return NULL;
+   }
+ }
+diff --git src/common/linux/memory_mapped_file.cc src/common/linux/memory_mapped_file.cc
+index a7b96eb5..12681174 100644
+--- src/common/linux/memory_mapped_file.cc
++++ src/common/linux/memory_mapped_file.cc
+@@ -72,7 +72,8 @@ bool MemoryMappedFile::Map(const char* path, size_t offset) {
+ 
+ #if defined(__x86_64__) || defined(__aarch64__) || \
+    (defined(__mips__) && _MIPS_SIM == _ABI64) || \
+-   (defined(__riscv) && __riscv_xlen == 64)
++   (defined(__riscv) && __riscv_xlen == 64) || \
++    defined(__loongarch64)
+ 
+   struct kernel_stat st;
+   if (sys_fstat(fd, &st) == -1 || st.st_size < 0) {
+diff --git src/common/linux/ucontext_constants.h src/common/linux/ucontext_constants.h
+index 3dcdecb0..bd7e5906 100644
+--- src/common/linux/ucontext_constants.h
++++ src/common/linux/ucontext_constants.h
+@@ -244,6 +244,16 @@
+ 
+ #define MCONTEXT_FPC_CSR      MCONTEXT_FPREGS_OFFSET + 32*MCONTEXT_FPREGS_SIZE
+ 
++#elif defined(__loongarch64)
++
++#define MCONTEXT_GREG_SIZE 8
++#define MCONTEXT_SIGMASK_OFFSET 40
++#define MCONTEXT_PC_OFFSET 176
++#define MCONTEXT_GREGS_OFFSET 184
++
++#define STORE_GPR(X) st.d $r##X, $a0, MCONTEXT_GREGS_OFFSET + X * MCONTEXT_GREG_SIZE
++#define STORE_PC st.d $ra, $a0, MCONTEXT_PC_OFFSET
++
+ #else
+ # error "This header has not been ported for your CPU"
+ #endif
+diff --git src/google_breakpad/common/minidump_format.h src/google_breakpad/common/minidump_format.h
+index 1526afce..8eb4166d 100644
+--- src/google_breakpad/common/minidump_format.h
++++ src/google_breakpad/common/minidump_format.h
+@@ -120,6 +120,7 @@ typedef struct {
+ #include "minidump_cpu_riscv.h"
+ #include "minidump_cpu_sparc.h"
+ #include "minidump_cpu_x86.h"
++#include "minidump_cpu_loong64.h"
+ 
+ /*
+  * WinVer.h
+@@ -686,6 +687,7 @@ typedef enum {
+   MD_CPU_ARCHITECTURE_MIPS64    = 0x8004, /* Breakpad-defined value for MIPS64 */
+   MD_CPU_ARCHITECTURE_RISCV     = 0x8005, /* Breakpad-defined value for RISCV */
+   MD_CPU_ARCHITECTURE_RISCV64   = 0x8006, /* Breakpad-defined value for RISCV64 */
++  MD_CPU_ARCHITECTURE_LOONGARCH64 = 0x8007, /* Breakpad-defined value for LOONGARCH64 */
+   MD_CPU_ARCHITECTURE_UNKNOWN   = 0xffff  /* PROCESSOR_ARCHITECTURE_UNKNOWN */
+ } MDCPUArchitecture;
+ 
+diff --git src/google_breakpad/processor/dump_context.h src/google_breakpad/processor/dump_context.h
+index 7a1c643e..4e8c158f 100644
+--- src/google_breakpad/processor/dump_context.h
++++ src/google_breakpad/processor/dump_context.h
+@@ -63,6 +63,7 @@ class DumpContext : public DumpObject {
+   const MDRawContextX86*     GetContextX86() const;
+   const MDRawContextRISCV*   GetContextRISCV() const;
+   const MDRawContextRISCV64* GetContextRISCV64() const;
++  const MDRawContextLOONGARCH64* GetContextLOONGARCH64() const;
+ 
+   // A convenience method to get the instruction pointer out of the
+   // MDRawContext, since it varies per-CPU architecture.
+@@ -90,6 +91,7 @@ class DumpContext : public DumpObject {
+   void SetContextMIPS(MDRawContextMIPS* ctx_mips);
+   void SetContextRISCV(MDRawContextRISCV* riscv);
+   void SetContextRISCV64(MDRawContextRISCV64* riscv64);
++  void SetContextLOONGARCH64(MDRawContextLOONGARCH64* loongarch64);
+ 
+   // Free the CPU-specific context structure.
+   void FreeContext();
+@@ -110,6 +112,7 @@ class DumpContext : public DumpObject {
+     MDRawContextMIPS*    ctx_mips;
+     MDRawContextRISCV*   riscv;
+     MDRawContextRISCV64* riscv64;
++    MDRawContextLOONGARCH64* loongarch64;
+   } context_;
+ 
+   // Store this separately because of the weirdo AMD64 context
+diff --git src/google_breakpad/processor/stack_frame_cpu.h src/google_breakpad/processor/stack_frame_cpu.h
+index 91f1d0cb..19d85350 100644
+--- src/google_breakpad/processor/stack_frame_cpu.h
++++ src/google_breakpad/processor/stack_frame_cpu.h
+@@ -514,6 +514,67 @@ struct StackFrameRISCV64 : public StackFrame {
+   int context_validity;
+ };
+ 
++struct StackFrameLOONGARCH64 : public StackFrame {
++  enum ContextValidity {
++    CONTEXT_VALID_NONE = 0,
++
++    CONTEXT_VALID_RA = 1UL << 1,
++    CONTEXT_VALID_TP = 1UL << 2,
++    CONTEXT_VALID_SP = 1UL << 3,
++    CONTEXT_VALID_A0 = 1UL << 4,
++    CONTEXT_VALID_A1 = 1UL << 5,
++    CONTEXT_VALID_A2 = 1UL << 6,
++    CONTEXT_VALID_A3 = 1UL << 7,
++    CONTEXT_VALID_A4 = 1UL << 8,
++    CONTEXT_VALID_A5 = 1UL << 9,
++    CONTEXT_VALID_A6 = 1UL << 10,
++    CONTEXT_VALID_A7 = 1UL << 11,
++    CONTEXT_VALID_T0 = 1UL << 12,
++    CONTEXT_VALID_T1 = 1UL << 13,
++    CONTEXT_VALID_T2 = 1UL << 14,
++    CONTEXT_VALID_T3 = 1UL << 15,
++    CONTEXT_VALID_T4 = 1UL << 16,
++    CONTEXT_VALID_T5 = 1UL << 17,
++    CONTEXT_VALID_T6 = 1UL << 18,
++    CONTEXT_VALID_T7 = 1UL << 19,
++    CONTEXT_VALID_T8 = 1UL << 20,
++    CONTEXT_VALID_X0 = 1UL << 21,
++    CONTEXT_VALID_FP = 1UL << 22,
++    CONTEXT_VALID_S0 = 1UL << 23,
++    CONTEXT_VALID_S1 = 1UL << 24,
++    CONTEXT_VALID_S2 = 1UL << 25,
++    CONTEXT_VALID_S3 = 1UL << 26,
++    CONTEXT_VALID_S4 = 1UL << 27,
++    CONTEXT_VALID_S5 = 1UL << 28,
++    CONTEXT_VALID_S6 = 1UL << 29,
++    CONTEXT_VALID_S7 = 1UL << 30,
++    CONTEXT_VALID_S8 = 1UL << 31,
++
++    CONTEXT_VALID_PC = 1UL << 32,
++    CONTEXT_VALID_ALL = ~CONTEXT_VALID_NONE
++  };
++
++  // Return the ContextValidity flag for register rN.
++  static ContextValidity RegisterValidFlag(int n) {
++    return ContextValidity(1 << n);
++  }
++
++  StackFrameLOONGARCH64() : context(), context_validity(CONTEXT_VALID_NONE) {}
++
++  // Register state. This is only fully valid for the topmost frame in a
++  // stack. In other frames, which registers are present depends on what
++  // debugging information were available. Refer to 'context_validity' below.
++  MDRawContextLOONGARCH64 context;
++
++  // For each register in context whose value has been recovered,
++  // the corresponding CONTEXT_VALID_ bit in 'context_validity' is set.
++  //
++  // context_validity's type should actually be ContextValidity, but
++  // type int is used instead because the bitwise inclusive or operator
++  // yields an int when applied to enum values, and C++ doesn't
++  // silently convert from ints to enums.
++  int context_validity;
++};
+ }  // namespace google_breakpad
+ 
+ #endif  // GOOGLE_BREAKPAD_PROCESSOR_STACK_FRAME_CPU_H__
+diff --git src/processor/dump_context.cc src/processor/dump_context.cc
+index 93d826c4..a7c31337 100644
+--- src/processor/dump_context.cc
++++ src/processor/dump_context.cc
+@@ -161,6 +161,15 @@ const MDRawContextRISCV64* DumpContext::GetContextRISCV64() const {
+   return context_.riscv64;
+ }
+ 
++const MDRawContextLOONGARCH64* DumpContext::GetContextLOONGARCH64() const {
++  if (GetContextCPU() != MD_CONTEXT_LOONGARCH64) {
++    BPLOG(ERROR) << "DumpContext cannot get LOONGARCH64 context";
++    return NULL;
++  }
++
++  return context_.loongarch64;
++}
++
+ bool DumpContext::GetInstructionPointer(uint64_t* ip) const {
+   BPLOG_IF(ERROR, !ip) << "DumpContext::GetInstructionPointer requires |ip|";
+   assert(ip);
+@@ -203,6 +212,9 @@ bool DumpContext::GetInstructionPointer(uint64_t* ip) const {
+   case MD_CONTEXT_RISCV64:
+     *ip = GetContextRISCV64()->pc;
+     break;
++  case MD_CONTEXT_LOONGARCH64:
++    *ip = GetContextLOONGARCH64()->csr_era;
++    break;
+   default:
+     // This should never happen.
+     BPLOG(ERROR) << "Unknown CPU architecture in GetInstructionPointer";
+@@ -253,6 +265,9 @@ bool DumpContext::GetStackPointer(uint64_t* sp) const {
+   case MD_CONTEXT_RISCV64:
+     *sp = GetContextRISCV64()->sp;
+     break;
++  case MD_CONTEXT_LOONGARCH:
++    *sp = GetContextLOONGARCH64()->iregs[MD_CONTEXT_LOONGARCH64_REG_SP];
++    break;
+   default:
+     // This should never happen.
+     BPLOG(ERROR) << "Unknown CPU architecture in GetStackPointer";
+@@ -305,6 +320,10 @@ void DumpContext::SetContextRISCV64(MDRawContextRISCV64* riscv64) {
+   context_.riscv64 = riscv64;
+ }
+ 
++void DumpContext::SetContextLOONGARCH64(MDRawContextLOONGARCH64* loongarch64) {
++  context_.loongarch64 = loongarch64;
++}
++
+ void DumpContext::FreeContext() {
+   switch (GetContextCPU()) {
+     case MD_CONTEXT_X86:
+@@ -348,6 +367,10 @@ void DumpContext::FreeContext() {
+       delete context_.riscv64;
+       break;
+ 
++    case MD_CONTEXT_LOONGARCH64:
++      delete context_.loongarch64;
++      break;
++
+     default:
+       // There is no context record (valid_ is false) or there's a
+       // context record for an unknown CPU (shouldn't happen, only known
+@@ -893,6 +916,34 @@ void DumpContext::Print() {
+       break;
+     }
+ 
++    case MD_CONTEXT_LOONGARCH64: {
++      const MDRawContextLOONGARCH64* context_loongarch = GetContextLOONGARCH64();
++      printf("MDRawContextLOONGARCH64\n");
++      printf(" context_flags           = 0x%x\n",
++            context_loongarch->context_flags);
++      for (int ireg_index = 0;
++          ireg_index < MD_CONTEXT_LOONGARCH64_GPR_COUNT;
++          ++ireg_index) {
++      printf(" iregs[%2d]              = 0x%" PRIx64 "\n",
++               ireg_index, context_loongarch->iregs[ireg_index]);
++      }
++
++      printf(" csr_era                 = 0x%" PRIx64 "\n",
++            context_loongarch->csr_era);
++      for (int fpr_index = 0;
++          fpr_index < MD_FLOATINGSAVEAREA_LOONGARCH64_FPR_COUNT;
++          ++fpr_index) {
++        printf("  float_save.regs[%2d] = 0x%" PRIx64 "\n",
++               fpr_index, context_loongarch->float_save.regs[fpr_index]);
++      }
++
++      printf("  float_save.fcc         = 0x%" PRIx64 "\n",
++            context_loongarch->float_save.fcc);
++      printf(" float_save.fcsr         = 0x%" PRIx32 "\n",
++            context_loongarch->float_save.fcsr);
++      break;
++    }
++
+     default: {
+       break;
+     }
+diff --git src/processor/minidump.cc src/processor/minidump.cc
+index 45e4a524..2400257c 100644
+--- src/processor/minidump.cc
++++ src/processor/minidump.cc
+@@ -109,6 +109,8 @@ bool IsContextSizeUnique(uint32_t context_size) {
+     num_matching_contexts++;
+   if (context_size == sizeof(MDRawContextRISCV64))
+     num_matching_contexts++;
++  if (context_size == sizeof(MDRawContextLOONGARCH64))
++    num_matching_contexts++;
+   return num_matching_contexts == 1;
+ }
+ 
+@@ -1350,6 +1352,59 @@ bool MinidumpContext::Read(uint32_t expected_size) {
+         break;
+       }
+ 
++      case MD_CONTEXT_LOONGARCH64: {
++        if (expected_size != sizeof(MDRawContextLOONGARCH64)) {
++          BPLOG(ERROR) << "MinidumpContext LOONGARCH64 size mismatch, "
++                       << expected_size
++                       << " != "
++                       << sizeof(MDRawContextLOONGARCH64);
++          return false;
++        }
++
++        scoped_ptr<MDRawContextLOONGARCH64> context_loongarch(new MDRawContextLOONGARCH64());
++
++        // Set the context_flags member, which has already been read, and
++        // read the rest of the structure beginning with the first member
++        // after context_flags.
++        context_loongarch->context_flags = context_flags;
++
++        size_t flags_size = sizeof(context_loongarch->context_flags);
++        uint8_t* context_after_flags =
++            reinterpret_cast<uint8_t*>(context_loongarch.get()) + flags_size;
++        if (!minidump_->ReadBytes(context_after_flags,
++                                  sizeof(MDRawContextLOONGARCH64) - flags_size)) {
++          BPLOG(ERROR) << "MinidumpContext could not read LOONGARCH64 context";
++          return false;
++        }
++
++        // Do this after reading the entire MDRawContext structure because
++        // GetSystemInfo may seek minidump to a new position.
++        if (!CheckAgainstSystemInfo(cpu_type)) {
++          BPLOG(ERROR) << "MinidumpContext LOONGARCH64 does not match system info";
++          return false;
++        }
++
++        if (minidump_->swap()) {
++          // context_loongarch->context_flags was already swapped.
++          for (int ireg_index = 0;
++               ireg_index < MD_CONTEXT_LOONGARCH64_GPR_COUNT;
++               ++ireg_index) {
++            Swap(&context_loongarch->iregs[ireg_index]);
++          }
++          Swap(&context_loongarch->csr_era);
++          for (int fpr_index = 0;
++               fpr_index < MD_FLOATINGSAVEAREA_LOONGARCH64_FPR_COUNT;
++               ++fpr_index) {
++            Swap(&context_loongarch->float_save.regs[fpr_index]);
++          }
++         Swap(&context_loongarch->float_save.fcc);
++         Swap(&context_loongarch->float_save.fcsr);
++        }
++        SetContextLOONGARCH64(context_loongarch.release());
++
++        break;
++      }
++
+       default: {
+         // Unknown context type - Don't log as an error yet. Let the
+         // caller work that out.
+@@ -1452,6 +1507,11 @@ bool MinidumpContext::CheckAgainstSystemInfo(uint32_t context_cpu_type) {
+       if (system_info_cpu_type == MD_CPU_ARCHITECTURE_RISCV64)
+         return_value = true;
+       break;
++
++    case MD_CONTEXT_LOONGARCH64:
++      if (system_info_cpu_type == MD_CPU_ARCHITECTURE_LOONGARCH64)
++        return_value = true;
++      break;
+   }
+ 
+   BPLOG_IF(ERROR, !return_value) << "MinidumpContext CPU " <<
+@@ -3971,6 +4031,10 @@ string MinidumpSystemInfo::GetCPU() {
+       cpu = "riscv64";
+       break;
+ 
++    case MD_CPU_ARCHITECTURE_LOONGARCH64:
++      cpu = "loongarch64";
++      break;
++
+     default:
+       BPLOG(ERROR) << "MinidumpSystemInfo unknown CPU for architecture " <<
+                       HexString(system_info_.processor_architecture);
+@@ -5660,6 +5724,9 @@ bool Minidump::GetContextCPUFlagsFromSystemInfo(uint32_t* context_cpu_flags) {
+       case MD_CPU_ARCHITECTURE_RISCV64:
+         *context_cpu_flags = MD_CONTEXT_RISCV64;
+         break;
++      case MD_CPU_ARCHITECTURE_LOONGARCH64:
++        *context_cpu_flags = MD_CONTEXT_LOONGARCH64;
++        break;
+       case MD_CPU_ARCHITECTURE_UNKNOWN:
+         *context_cpu_flags = 0;
+         break;
+diff --git src/processor/minidump_processor.cc src/processor/minidump_processor.cc
+index 5ba6ff4f..5d292670 100644
+--- src/processor/minidump_processor.cc
++++ src/processor/minidump_processor.cc
+@@ -643,6 +643,10 @@ bool MinidumpProcessor::GetCPUInfo(Minidump* dump, SystemInfo* info) {
+       break;
+     }
+ 
++    case MD_CPU_ARCHITECTURE_LOONGARCH64: {
++      info->cpu = "loongarch64";
++    }
++
+     default: {
+       // Assign the numeric architecture ID into the CPU string.
+       char cpu_string[7];
+diff --git src/processor/stackwalker.cc src/processor/stackwalker.cc
+index 1ff6cf7c..df4f98ae 100644
+--- src/processor/stackwalker.cc
++++ src/processor/stackwalker.cc
+@@ -60,6 +60,7 @@
+ #include "processor/stackwalker_mips.h"
+ #include "processor/stackwalker_riscv.h"
+ #include "processor/stackwalker_riscv64.h"
++#include "processor/stackwalker_loong64.h"
+ 
+ namespace google_breakpad {
+ 
+@@ -290,6 +291,13 @@ Stackwalker* Stackwalker::StackwalkerForCPU(
+                                                memory, modules,
+                                                frame_symbolizer);
+       break;
++
++    case MD_CONTEXT_LOONGARCH64:
++      cpu_stackwalker = new StackwalkerLOONGARCH64(system_info,
++                                                   context->GetContextLOONGARCH64(),
++                                                   memory, modules,
++                                                   frame_symbolizer);
++      break;
+   }
+ 
+   BPLOG_IF(ERROR, !cpu_stackwalker) << "Unknown CPU type " << HexString(cpu) <<
+diff --git src/tools/linux/md2core/minidump-2-core.cc src/tools/linux/md2core/minidump-2-core.cc
+index f12f2841..15a1cda2 100644
+--- src/tools/linux/md2core/minidump-2-core.cc
++++ src/tools/linux/md2core/minidump-2-core.cc
+@@ -82,6 +82,8 @@
+   #define ELF_ARCH  EM_AARCH64
+ #elif defined(__riscv)
+   #define ELF_ARCH  EM_RISCV
++#elif defined(__loongarch64)
++  #define ELF_ARCH  EM_LOONGARCH
+ #endif
+ 
+ #if defined(__arm__)
+@@ -264,7 +266,7 @@ typedef struct prpsinfo {       /* Information about process                 */
+   unsigned char  pr_zomb;       /* Zombie                                    */
+   signed char    pr_nice;       /* Nice val                                  */
+   unsigned long  pr_flag;       /* Flags                                     */
+-#if defined(__x86_64__) || defined(__mips__) || defined(__riscv)
++#if defined(__x86_64__) || defined(__mips__) || defined(__riscv) || defined(__loongarch64)
+   uint32_t       pr_uid;        /* User ID                                   */
+   uint32_t       pr_gid;        /* Group ID                                  */
+ #else
+@@ -324,6 +326,9 @@ struct CrashedProcess {
+ #endif
+ #if defined(__aarch64__)
+     user_fpsimd_struct fpregs;
++#endif
++#if defined(__loongarch64)
++    user_fp_struct fpregs;
+ #endif
+     uintptr_t stack_addr;
+     const uint8_t* stack;
+@@ -603,6 +608,21 @@ ParseThreadRegisters(CrashedProcess::Thread* thread,
+ #  error "Unexpected __riscv_flen"
+ # endif
+ }
++#elif defined(__loongarch64)
++static void
++ParseThreadRegisters(CrashedProcess::Thread* thread,
++                    const MinidumpMemoryRange& range) {
++  const MDRawContextLOONGARCH64* rawregs = range.GetData<MDRawContextLOONGARCH64>(0);
++
++  for (int i = 0; i < MD_CONTEXT_LOONGARCH64_GPR_COUNT; ++i)
++    thread->regs.regs[i] = rawregs->iregs[i];
++
++  thread->regs.csr_era = rawregs->csr_era;
++
++  memcpy(thread->fpregs.fpr, rawregs->float_save.regs, 8 * 32);
++  thread->fpregs.fcc = rawregs->float_save.fcc;
++  thread->fpregs.fcsr = rawregs->float_save.fpcr;
++}
+ #else
+ #error "This code has not been ported to your platform yet"
+ #endif
+@@ -708,6 +728,12 @@ ParseSystemInfo(const Options& options, CrashedProcess* crashinfo,
+ # else
+ #  error "Unexpected __riscv_xlen"
+ # endif
++#elif defined (__loongarch64)
++  if (sysinfo->processor_architecture != MD_CPU_ARCHITECTURE_LOONGARCH64) {
++    fprintf(stderr,
++            "This version of minidump-2-core only supports loongarch64.\n");
++    exit(1);
++  }
+ #else
+ #error "This code has not been ported to your platform yet"
+ #endif
+@@ -739,6 +765,8 @@ ParseSystemInfo(const Options& options, CrashedProcess* crashinfo,
+             ? "RISCV"
+             : sysinfo->processor_architecture == MD_CPU_ARCHITECTURE_RISCV64
+             ? "RISCV64"
++            : sysinfo->processor_architecture == MD_CPU_ARCHITECTURE_LOONGARCH64
++            ? "LOONGARCH64"
+             : "???",
+             sysinfo->number_of_processors,
+             sysinfo->processor_level,
