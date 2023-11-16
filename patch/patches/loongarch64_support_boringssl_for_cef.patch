@@ -1,0 +1,27 @@
+diff --git crypto/fipsmodule/rand/getrandom_fillin.h crypto/fipsmodule/rand/getrandom_fillin.h
+index 0f290e963..5f03768be 100644
+--- crypto/fipsmodule/rand/getrandom_fillin.h
++++ crypto/fipsmodule/rand/getrandom_fillin.h
+@@ -32,6 +32,8 @@
+ #define EXPECTED_NR_getrandom 384
+ #elif defined(OPENSSL_RISCV64)
+ #define EXPECTED_NR_getrandom 278
++#elif defined(OPENSSL_LOONGARCH64)
++#define EXPECTED_NR_getrandom 278
+ #endif
+ 
+ #if defined(EXPECTED_NR_getrandom)
+diff --git include/openssl/target.h include/openssl/target.h
+index f830c14ce..919d91818 100644
+--- include/openssl/target.h
++++ include/openssl/target.h
+@@ -54,6 +54,9 @@
+ #define OPENSSL_32_BIT
+ #elif defined(__myriad2__)
+ #define OPENSSL_32_BIT
++#elif defined(__loongarch_lp64)
++#define OPENSSL_64_BIT
++#define OPENSSL_LOONGARCH64
+ #else
+ // Note BoringSSL only supports standard 32-bit and 64-bit two's-complement,
+ // little-endian architectures. Functions will not produce the correct answer
