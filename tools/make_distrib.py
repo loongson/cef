@@ -521,6 +521,12 @@ parser.add_option(
     default=False,
     help='create an ARM64 binary distribution (Linux only)')
 parser.add_option(
+    '--loong64-build',
+    action='store_true',
+    dest='loong64build',
+    default=False,
+    help='create a LoongArch 64-bit binary distribution (Linux only)')
+parser.add_option(
     '--minimal',
     action='store_true',
     dest='minimal',
@@ -634,6 +640,9 @@ elif options.armbuild:
 elif options.arm64build:
   platform_arch = 'arm64'
   binary_arch = 'arm64'
+elif options.loong64build:
+  platform_arch = 'loong64'
+  binary_arch = 'loong64'
 else:
   platform_arch = '32'
   binary_arch = 'x86'
@@ -693,12 +702,14 @@ elif options.armbuild:
   build_dir_suffix = '_GN_arm'
 elif options.arm64build:
   build_dir_suffix = '_GN_arm64'
+elif options.loong64build:
+  build_dir_suffix = '_GN_loong64'
 else:
   build_dir_suffix = '_GN_x86'
 
 # Determine the build directory paths.
 out_dir = os.path.join(src_dir, 'out')
-build_dir_debug = os.path.join(out_dir, 'Debug' + build_dir_suffix)
+#build_dir_debug = os.path.join(out_dir, 'Debug' + build_dir_suffix)
 build_dir_release = os.path.join(out_dir, 'Release' + build_dir_suffix)
 
 if mode == 'standard' or mode == 'minimal':
@@ -739,8 +750,8 @@ if mode == 'standard' or mode == 'minimal':
     # Debug and Release build should be the same so grab whichever exists.
     src_path = os.path.join(build_dir_release, 'includes', 'include', include)
     if not os.path.exists(src_path):
-      src_path = os.path.join(build_dir_debug, 'includes', 'include', include)
-      if not os.path.exists(src_path):
+      #src_path = os.path.join(build_dir_debug, 'includes', 'include', include)
+      #if not os.path.exists(src_path):
         raise Exception('Missing generated header file: %s' % include)
     copy_file(src_path, os.path.join(include_dir, include), options.quiet)
 
@@ -938,7 +949,7 @@ if platform == 'windows':
   # should exist when GN is_official_build=true.
   if mode in ('standard', 'minimal', 'sandbox'):
     dirs = {
-        'Debug': (build_dir_debug + '_sandbox', build_dir_debug),
+        #'Debug': (build_dir_debug + '_sandbox', build_dir_debug),
         'Release': (build_dir_release + '_sandbox', build_dir_release)
     }
     for dir_name in dirs.keys():
@@ -951,27 +962,27 @@ if platform == 'windows':
           break
 
   valid_build_dir = None
-
-  if mode == 'standard':
-    # transfer Debug files
-    build_dir = build_dir_debug
-    if not options.allowpartial or path_exists(
-        os.path.join(build_dir, libcef_dll)):
-      valid_build_dir = build_dir
-      dst_dir = os.path.join(output_dir, 'Debug')
-      copy_files_list(build_dir, dst_dir, binaries)
-
-      if not options.nosymbols:
-        # create the symbol output directory
-        symbol_output_dir = create_output_dir(
-            output_dir_name + '_debug_symbols', options.outputdir)
-        # transfer contents
-        copy_file(
-            os.path.join(build_dir, libcef_dll_pdb), symbol_output_dir,
-            options.quiet)
-    else:
-      sys.stdout.write("No Debug build files.\n")
-
+#
+#  if mode == 'standard':
+#    # transfer Debug files
+#    build_dir = build_dir_debug
+#    if not options.allowpartial or path_exists(
+#        os.path.join(build_dir, libcef_dll)):
+#      valid_build_dir = build_dir
+#      dst_dir = os.path.join(output_dir, 'Debug')
+#      copy_files_list(build_dir, dst_dir, binaries)
+#
+#      if not options.nosymbols:
+#        # create the symbol output directory
+#        symbol_output_dir = create_output_dir(
+#            output_dir_name + '_debug_symbols', options.outputdir)
+#        # transfer contents
+#        copy_file(
+#            os.path.join(build_dir, libcef_dll_pdb), symbol_output_dir,
+#            options.quiet)
+#    else:
+#      sys.stdout.write("No Debug build files.\n")
+#
   if mode != 'sandbox':
     # transfer Release files
     build_dir = build_dir_release
@@ -1054,7 +1065,7 @@ elif platform == 'mac':
   # should exist when GN is_official_build=true.
   if mode in ('standard', 'minimal', 'sandbox'):
     dirs = {
-        'Debug': (build_dir_debug + '_sandbox', build_dir_debug),
+        #'Debug': (build_dir_debug + '_sandbox', build_dir_debug),
         'Release': (build_dir_release + '_sandbox', build_dir_release)
     }
     for dir_name in dirs.keys():
@@ -1067,35 +1078,35 @@ elif platform == 'mac':
           break
 
   valid_build_dir = None
-
-  if mode == 'standard':
-    # transfer Debug files
-    build_dir = build_dir_debug
-    if not options.allowpartial or path_exists(
-        os.path.join(build_dir, cefclient_app)):
-      valid_build_dir = build_dir
-      dst_dir = os.path.join(output_dir, 'Debug')
-      make_dir(dst_dir, options.quiet)
-      framework_src_dir = os.path.join(
-          build_dir, '%s/Contents/Frameworks/%s.framework/Versions/A' %
-          (cefclient_app, framework_name))
-      framework_dst_dir = os.path.join(dst_dir, '%s.framework' % framework_name)
-      copy_dir(framework_src_dir, framework_dst_dir, options.quiet)
-
-      if not options.nosymbols:
-        # create the symbol output directory
-        symbol_output_dir = create_output_dir(
-            output_dir_name + '_debug_symbols', options.outputdir)
-
-        # The real dSYM already exists, just copy it to the output directory.
-        # dSYMs are only generated when is_official_build=true or enable_dsyms=true.
-        # See //build/config/mac/symbols.gni.
-        copy_dir(
-            os.path.join(build_dir, framework_dsym),
-            os.path.join(symbol_output_dir, framework_dsym), options.quiet)
-    else:
-      sys.stdout.write("No Debug build files.\n")
-
+#
+#  if mode == 'standard':
+#    # transfer Debug files
+#    build_dir = build_dir_debug
+#    if not options.allowpartial or path_exists(
+#        os.path.join(build_dir, cefclient_app)):
+#      valid_build_dir = build_dir
+#      dst_dir = os.path.join(output_dir, 'Debug')
+#      make_dir(dst_dir, options.quiet)
+#      framework_src_dir = os.path.join(
+#          build_dir, '%s/Contents/Frameworks/%s.framework/Versions/A' %
+#          (cefclient_app, framework_name))
+#      framework_dst_dir = os.path.join(dst_dir, '%s.framework' % framework_name)
+#      copy_dir(framework_src_dir, framework_dst_dir, options.quiet)
+#
+#      if not options.nosymbols:
+#        # create the symbol output directory
+#        symbol_output_dir = create_output_dir(
+#            output_dir_name + '_debug_symbols', options.outputdir)
+#
+#        # The real dSYM already exists, just copy it to the output directory.
+#        # dSYMs are only generated when is_official_build=true or enable_dsyms=true.
+#        # See //build/config/mac/symbols.gni.
+#        copy_dir(
+#            os.path.join(build_dir, framework_dsym),
+#            os.path.join(symbol_output_dir, framework_dsym), options.quiet)
+#    else:
+#      sys.stdout.write("No Debug build files.\n")
+#
   if mode != 'sandbox':
     # transfer Release files
     build_dir = build_dir_release
@@ -1198,11 +1209,9 @@ elif platform == 'linux':
       {'path': libcef_so},
       {'path': 'libEGL.so'},
       {'path': 'libGLESv2.so'},
-      {'path': 'libvk_swiftshader.so'},
       {'path': 'libvulkan.so.1'},
       {'path': 'snapshot_blob.bin', 'conditional': True},
       {'path': 'v8_context_snapshot.bin', 'conditional': True},
-      {'path': 'vk_swiftshader_icd.json'},
   ]
   # yapf: enable
   if options.ozone:
@@ -1222,18 +1231,18 @@ elif platform == 'linux':
   # yapf: enable
 
   valid_build_dir = None
-
-  if mode == 'standard':
-    # transfer Debug files
-    build_dir = build_dir_debug
-    libcef_path = os.path.join(build_dir, libcef_so)
-    if not options.allowpartial or path_exists(libcef_path):
-      valid_build_dir = build_dir
-      dst_dir = os.path.join(output_dir, 'Debug')
-      copy_files_list(build_dir, dst_dir, binaries)
-    else:
-      sys.stdout.write("No Debug build files.\n")
-
+#
+#  if mode == 'standard':
+#    # transfer Debug files
+#    build_dir = build_dir_debug
+#    libcef_path = os.path.join(build_dir, libcef_so)
+#    if not options.allowpartial or path_exists(libcef_path):
+#      valid_build_dir = build_dir
+#      dst_dir = os.path.join(output_dir, 'Debug')
+#      copy_files_list(build_dir, dst_dir, binaries)
+#    else:
+#      sys.stdout.write("No Debug build files.\n")
+#
   # transfer Release files
   build_dir = build_dir_release
   libcef_path = os.path.join(build_dir, libcef_so)
