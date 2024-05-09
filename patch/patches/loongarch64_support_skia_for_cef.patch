@@ -1,0 +1,12 @@
+diff --git modules/skcms/src/skcms_internals.h modules/skcms/src/skcms_internals.h
+index 3871ea35a3..2e55faa824 100644
+--- modules/skcms/src/skcms_internals.h
++++ modules/skcms/src/skcms_internals.h
+@@ -46,6 +46,7 @@ extern "C" {
+                                                  && !defined(__EMSCRIPTEN__) \
+                                                  && !defined(__arm__) \
+                                                  && !defined(__riscv) \
++                                                 && !defined(__loongarch64) \
+                                                  && !defined(_WIN32) && !defined(__SYMBIAN32__)
+             #define SKCMS_HAS_MUSTTAIL 1
+         #endif
