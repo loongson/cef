@@ -1,0 +1,35 @@
+diff --git src/Reactor/BUILD.gn src/Reactor/BUILD.gn
+index 67dfeb0ec..dcb13614a 100644
+--- src/Reactor/BUILD.gn
++++ src/Reactor/BUILD.gn
+@@ -307,7 +307,7 @@ if (supports_subzero) {
+ 
+ if (supports_llvm) {
+   swiftshader_source_set("swiftshader_llvm_reactor") {
+-    llvm_dir = "../../third_party/llvm-10.0"
++    llvm_dir = "../../third_party/llvm-16.0"
+ 
+     deps = [
+       ":swiftshader_reactor_base",
+diff --git third_party/llvm-16.0/llvm/include/llvm/Support/AlignOf.h third_party/llvm-16.0/llvm/include/llvm/Support/AlignOf.h
+index a8c45785c..b3c8d621d 100644
+--- third_party/llvm-16.0/llvm/include/llvm/Support/AlignOf.h
++++ third_party/llvm-16.0/llvm/include/llvm/Support/AlignOf.h
+@@ -14,13 +14,16 @@
+ #define LLVM_SUPPORT_ALIGNOF_H
+ 
+ #include <algorithm>
++#include <type_traits>
+ 
+ namespace llvm {
+ 
+ /// A suitably aligned and sized character array member which can hold elements
+ /// of any type.
+ template <typename T, typename... Ts> struct AlignedCharArrayUnion {
+-  alignas(Ts...) char buffer[std::max({sizeof(Ts)...})];
++  //alignas(Ts...) char buffer[std::max({sizeof(Ts)...})];
++  using AlignedUnion = std::aligned_union_t<1, T, Ts...>;
++  alignas(alignof(AlignedUnion)) char buffer[sizeof(AlignedUnion)];
+ };
+ 
+ } // end namespace llvm
