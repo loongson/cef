@@ -11,6 +11,19 @@ index e0322f879d8e9..bb60d00f0615b 100644
  #define PTHREAD_STACK_MIN_CONST \
    (__builtin_constant_p(PTHREAD_STACK_MIN) ? PTHREAD_STACK_MIN : 131072)
  #else
+diff --git base/system/sys_info.cc base/system/sys_info.cc
+index 000604bcb883c..ded8973b556c1 100644
+--- base/system/sys_info.cc
++++ base/system/sys_info.cc
+@@ -256,6 +256,8 @@ std::string SysInfo::ProcessCPUArchitecture() {
+   return "ARM_64";
+ #elif defined(ARCH_CPU_RISCV64)
+   return "RISCV_64";
++#elif defined(ARCH_CPU_LOONGARCH64)
++  return "LOONGARCH64";
+ #else
+   return std::string();
+ #endif
 diff --git build/config/clang/BUILD.gn build/config/clang/BUILD.gn
 index f27d52c3b6812..6e5affafc0656 100644
 --- build/config/clang/BUILD.gn
@@ -171,6 +184,32 @@ index d4667897c428c..aa704228f34eb 100644
  }
  
  void AppUninstallDialogView::OnWidgetInitialized() {
+diff --git components/variations/proto/study.proto components/variations/proto/study.proto
+index 7ef5eb238e1a2..b3cfbb2811f2c 100644
+--- components/variations/proto/study.proto
++++ components/variations/proto/study.proto
+@@ -262,6 +262,7 @@ message Study {
+     // A Mac-only value, indicating an x86-64 binary running on an arm64 host
+     // via "Rosetta 2" binary translation.
+     TRANSLATED_X86_64 = 4;
++    LOONGARCH64 = 5;
+   }
+ 
+   // Enum to pass as optional bool.
+diff --git components/variations/service/variations_field_trial_creator_base.cc components/variations/service/variations_field_trial_creator_base.cc
+index e91cfc139cd5b..dcddebfd90c73 100644
+--- components/variations/service/variations_field_trial_creator_base.cc
++++ components/variations/service/variations_field_trial_creator_base.cc
+@@ -115,6 +115,9 @@ Study::CpuArchitecture GetCurrentCpuArchitecture() {
+   if (process_arch == "x86") {
+     return Study::X86_32;
+   }
++  if (process_arch == "LOONGARCH64") {
++    return Study::LOONGARCH64;
++  }
+   if (process_arch == "x86_64") {
+     std::string os_arch = base::SysInfo::OperatingSystemArchitecture();
+     if (base::StartsWith(os_arch, "arm",
 diff --git extensions/common/api/runtime.json extensions/common/api/runtime.json
 index 723850ef9a1b7..96dbd65cd8229 100644
 --- extensions/common/api/runtime.json
