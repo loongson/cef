@@ -1,0 +1,27 @@
+diff --git crypto/rand/urandom.cc crypto/rand/urandom.cc
+index b5aabde15..e565565a3 100644
+--- crypto/rand/urandom.cc
++++ crypto/rand/urandom.cc
+@@ -65,7 +65,7 @@ static const int kHaveGetrandom = -3;
+ // urandom_fd is a file descriptor to /dev/urandom. It's protected by `once`.
+ static int urandom_fd;
+ 
+-static CRYPTO_once_t rand_once = CRYPTO_ONCE_INIT;
++static bssl::CRYPTO_once_t rand_once = CRYPTO_ONCE_INIT;
+ 
+ // init_once initializes the state of this module to values previously
+ // requested. This is the only function that modifies `urandom_fd`, which may be
+diff --git include/openssl/target.h include/openssl/target.h
+index 2372a055d..52c1fea86 100644
+--- include/openssl/target.h
++++ include/openssl/target.h
+@@ -56,6 +56,9 @@
+ #define OPENSSL_32_BIT
+ #elif defined(__myriad2__)
+ #define OPENSSL_32_BIT
++#elif defined(__loongarch64)
++#define OPENSSL_64_BIT
++#define OPENSSL_LOONGARCH64
+ #else
+ // The list above enumerates the platforms that BoringSSL supports. For these
+ // platforms we keep a reasonable bar of not breaking them: automated test

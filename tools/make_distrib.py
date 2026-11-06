@@ -701,6 +701,12 @@ This utility builds the CEF Binary Distribution.
       default=False,
       help='create an ARM64 binary distribution (Linux only)')
   parser.add_option(
+      '--loong64-build',
+      action='store_true',
+      dest='loong64build',
+      default=False,
+      help='create a LoongArch 64-bit binary distribution (Linux only)')
+  parser.add_option(
       '--minimal',
       action='store_true',
       dest='minimal',
@@ -779,6 +785,8 @@ def get_architecture(options):
     return ('arm', 'arm', '_GN_arm')
   if options.arm64build:
     return ('arm64', 'arm64', '_GN_arm64')
+  if options.loong64build:
+    return ('loong64', 'loong64', '_GN_loong64')
   return ('32', 'x86', '_GN_x86')
 
 

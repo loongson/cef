@@ -438,8 +438,8 @@ def ValidateArgs(args, is_debug):
                           'arm64'), 'target_cpu must be "x86", "x64" or "arm64"'
   elif platform == 'linux':
     assert target_cpu in (
-        'x86', 'x64', 'arm',
-        'arm64'), 'target_cpu must be "x86", "x64", "arm" or "arm64"'
+        'x86', 'x64', 'arm', 'loong64',
+        'arm64'), 'target_cpu must be "x86", "x64", "arm", "loong64" or "arm64"'
 
   if platform == 'linux':
     if target_cpu == 'x86':
@@ -448,6 +448,8 @@ def ValidateArgs(args, is_debug):
       assert use_sysroot, 'target_cpu="arm" requires use_sysroot=true'
     elif target_cpu == 'arm64':
       assert use_sysroot, 'target_cpu="arm64" requires use_sysroot=true'
+    elif target_cpu == 'loong64':
+      assert use_sysroot, 'target_cpu="loong64" requires use_sysroot=true'
 
   # ASAN requires Release builds.
   if is_asan:
@@ -635,6 +637,8 @@ def LinuxSysrootExists(cpu):
     sysroot_name = 'debian_%s_armhf-sysroot' % release
   elif cpu == 'arm64':
     sysroot_name = 'debian_%s_arm64-sysroot' % release
+  elif cpu == 'loong64':
+    sysroot_name = 'debian_%s_loong64-sysroot' % release
   else:
     raise Exception('Unrecognized sysroot CPU: %s' % cpu)
 
@@ -667,7 +671,7 @@ def GetAllPlatformConfigs(build_args, quiet=False):
     use_sysroot = GetArgValue(args, 'use_sysroot')
     if use_sysroot:
       # Only generate configurations for sysroots that have been installed.
-      for cpu in ('x64', 'arm', 'arm64'):
+      for cpu in ('x64', 'arm', 'arm64', 'loong64'):
         if LinuxSysrootExists(cpu):
           supported_cpus.append(cpu)
         else:
